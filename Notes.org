@@ -1,0 +1,174 @@
+#+TITLE: Notes
+#+DATE: 26 Dec 2019
+#+AUTHOR: Richard Stewing
+#+EMAIL: richard.stewing@udo.edu
+#+OPTIONS: toc:nil
+
+* Device 
+
+- STM32F303VCT6 
+- 256 KiB of "Flash" memory
+- 48 KiB of RAM
+- A variety of integrated peripherals such as timers, I2C, SPI and USART
+- General purpose Input Output (GPIO) and other types of pins accessible through 
+  the two rows of headers along side the board
+- A USB interface accessible through the USB port labeled "USB USER"
+- An accelerometer as part of the LSM303DLHC chip
+- A magnetometer as part of the LSM303DLHC chip
+- A gyroscope as part of the L3GD20 chip
+- 8 user LEDs arranged in the shape of a compass
+- A second microcontroller: a STM32F103. 
+  This microcontroller is actually part of an on-board 
+  programmer/debugger and is connected to the USB port named "USB ST- LINK"
+
+* Rust Environment
+- Can't use std -> no_std
+- No runtime -> no libstd
+
+|----------------------------------------------+-----------------------------------------------------+-----|
+| feature                                      | no_std                                              | std |
+|----------------------------------------------+-----------------------------------------------------+-----|
+| heap                                         | with alloc crate and allocator [[https://github.com/rust-embedded/alloc-cortex-m][this]]                 | yes |
+| collections                                  | with collections crate and global default allocator | yes |
+| runs init code                               | no                                                  | yes |
+| libstd                                       | no                                                  | yes |
+| libcore                                      | yes                                                 | yes |
+| writing firmware, kernel, or bootloader code | yes                                                 | no  |
+|----------------------------------------------+-----------------------------------------------------+-----|
+
+* Tooling
+** Base
+  #+begin_src shell
+  # GDB
+  brew install armmbed/formulae/arm-none-eabi-gcc $
+  # OpenOCD
+  brew install openocd
+  # QEMU
+  brew install qemu
+  #+end_src
+
+- Test by ``openocd -f interface/stlink-v2-1.cfg -f target/stm32f3x.cfg''
+
+** Rust
+- Version <=1.31 and ARM Cortex-M compilation support
+- ``rustup target add thumbv7em-none-eabihf''
+** Cargo
+   #+begin_src shell
+   cargo install cargo-generate
+   cargo install cargo-binutils
+   rustup component add llvm-tools-preview
+   #+end_src
+* First Programm
+- Get Program:  
+  #+begin_src shell
+  cargo generate --git https://github.com/rust-embedded/cortex-m-quickstart
+  # Project Name: app
+  # Creating project called `app`...
+  # Done! New project created /tmp/app
+  cd app
+  #+end_src
+- Set up cross compile
+  #+begin_src shell
+  # .cargo/config
+  [build]
+  # Pick ONE of these compilation targets
+  # target = "thumbv6m-none-eabi"    # Cortex-M0 and Cortex-M0+ 
+  # target = "thumbv7m-none-eabi"      # Cortes-M3
+  # target = "thumbv7em-none-eabi"   # Cortes-M4 and Cortex-M7 (no FPU)
+  target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (with FPU)
+  #+end_src
+- Buil: ``cargo build''
+- Inspection
+  - ``cargo readobj --bin app -- -file-headers''
+  - ``cargo size --bin app --release -- -A''
+  - ``cargo objdump --bin app --release -- 
+      -disassemble -no-show-raw-insn -print- imm-hex''
+- Running:
+  - ``cargo build --example hello''
+  - ``qemu-system-arm \
+      -cpu cortex-m3 \
+      -machine lm3s6965evb \
+      -nographic \
+      -semihosting-config enable=on,target=native \
+      -kernel target/thumbv7m-none-eabi/debug/examples/hello''
+    - Runner can be set up in ``.cargo/config''
+  - ``arm-none-eabi-gdb -q target/thumbv7em-none-eabihf/debug/examples/hello''
+    - ``target remote :3333''
+    - ``break main''
+    - ``continue''
+    - ``next''
+    - ``quit''
+
+* With Hardware
+
+- Get Program:  
+  #+begin_src shell
+  cargo generate --git https://github.com/rust-embedded/cortex-m-quickstart
+  # Project Name: app
+  # Creating project called `app`...
+  # Done! New project created /tmp/app
+  cd app
+  #+end_src
+- Set up cross compile
+  #+begin_src shell
+  # .cargo/config
+  [build]
+  # Pick ONE of these compilation targets
+  # target = "thumbv6m-none-eabi"    # Cortex-M0 and Cortex-M0+ 
+  # target = "thumbv7m-none-eabi"      # Cortes-M3
+  # target = "thumbv7em-none-eabi"   # Cortes-M4 and Cortex-M7 (no FPU)
+  target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (with FPU)
+  #+end_src
+- Setup memory
+  #+begin_src c
+  /* Linker script for the STM32F303VCT6 */
+  MEMORY
+  {
+   /* NOTE 1 K = 1 KiBi = 1024 bytes */
+   FLASH : ORIGIN = 0x08000000, LENGTH = 256K
+     RAM : ORIGIN = 0x20000000, LENGTH = 40K
+  }
+  #+end_src
+- Comment out ``debug::exit()''
+- Build: ``cargo build --example hello''
+- ``openocd''
+  - config is in ``openocd.cfg''
+    #+begin_src shell
+    # Sample OpenOCD configuration for the STM32F3DISCOVERY development board
+    # Depending on the hardware revision you got you'll have to pick ONE of these
+    # interfaces. At any time only one interface should be commented out.
+    # Revision C (newer revision)
+    source [find interface/stlink-v2-1.cfg]
+    # Revision A and B (older revisions)
+    # source [find interface/stlink-v2.cfg]
+    source [find target/stm32f3x.cfg]
+    #+end_src
+- ``arm-none-eabi-gdb -q target/thumbv7em-none-eabihf/debug/examples/hello''
+  - ``target remote :3333''
+  - ``load''
+  - ``monitor arm semihosting enable''
+  - ``break main''
+  - ``continue''
+  - ``next''
+  - ``quit''
+  - Boilerplate is in ``openocd.gdb''
+    #+begin_src shell
+    target remote :3333
+
+    # print demangled symbols
+    set print asm-demangle on
+
+    # detect unhandled exceptions, hard faults and panics break DefaultHandler
+    break HardFault
+    break rust_begin_unwind
+
+    monitor arm semihosting enable
+
+    load
+
+    # start the process but immediately halt the processor
+    stepi
+    #+end_src
+    - can be called with `` arm-none-eabi-gdb -x openocd.gdb 
+      target/thumbv7em-none-eabihf/debug/examples/hello''
+    - or runner in ``.cargo/config''
