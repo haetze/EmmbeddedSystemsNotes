@@ -291,3 +291,8 @@
   debug = true # symbols are nice and they don't increase the size on Flash
   lto = true # better optimizations
   #+end_src
+* Links
+- https://docs.rs/f3/0.6.1/f3/index.html
+- https://docs.rs/stm32f30x-hal/0.2.0/stm32f30x_hal/index.html
+- https://docs.rs/cortex-m/0.6.1/cortex_m/
+- https://docs.rs/cortex-m-rt/0.6.11/cortex_m_rt/
