@@ -366,6 +366,71 @@
   }
 
   #+end_src
+* Using an Allocator
+  #+begin_src rust
+  #![no_main]
+  #![no_std]
+  #![feature(lang_items)]
+
+  extern crate f3;
+
+  extern crate alloc;
+  use alloc::vec::Vec;
+  use alloc::alloc::Layout;
+
+  extern crate alloc_cortex_m;
+  use alloc_cortex_m::CortexMHeap;
+
+  extern crate panic_halt;
+
+  use cortex_m::peripheral::syst::SystClkSource;
+  use cortex_m::Peripherals;
+  use cortex_m_rt::{entry, exception, heap_start};
+  use cortex_m_semihosting::hprint;
+
+
+  #[global_allocator]
+  static ALLOCATOR: CortexMHeap = CortexMHeap::empty();
+
+  #[entry]
+  fn main() -> ! {
+    
+      let p = Peripherals::take().unwrap();
+      let mut syst = p.SYST;
+      let size = 1024;
+      let start = heap_start() as usize;
+      unsafe { ALLOCATOR.init(start, size) }
+    
+      syst.set_clock_source(SystClkSource::Core);
+      syst.set_reload(2_000); // period = 1s
+      syst.enable_counter();
+      syst.enable_interrupt();
+    
+      loop {    
+      }
+    
+  }
+
+  #[exception]
+  fn SysTick() {
+      static mut COUNT : u32 = 0;
+      static mut COUNTS : Vec<u32> = Vec::new();
+    
+      ,*COUNT = *COUNT + 1;
+      COUNTS.push(*COUNT);
+    
+      hprint!("{}\n", COUNT).unwrap();
+  }
+
+  #[lang = "oom"]
+  #[no_mangle]
+  pub fn rust_oom(_layout : Layout) -> ! {
+      hprint!("Out of Memory\n").unwrap();
+      loop{}
+    
+  }
+
+  #+end_src
 * Links
 - https://docs.rs/f3/0.6.1/f3/index.html
 - https://docs.rs/stm32f30x-hal/0.2.0/stm32f30x_hal/index.html
